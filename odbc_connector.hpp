@@ -3,39 +3,67 @@
 
 #include <sql.h>
 #include <sqlext.h>
+#include <sqltypes.h>
+#include <iostream>
 #include <string>
 
-// 我写了个简单的单例模式，避免资源浪费，跑不是特别大的benchmark应该是够用的
-// 如果并发度特别高，也可以写个connector的池子。
-class ODBCConnector {
-public:
+inline void HandleError(SQLSMALLINT handleType, SQLHANDLE handle) {
+  SQLCHAR sqlState[6], message[256];
+  SQLINTEGER nativeError;
+  SQLSMALLINT messageLength;
+  std::string err_msg;
 
-  //singletone
-  static ODBCConnector& GetInstance();
+  if (SQLGetDiagRec(handleType, handle, 1, sqlState, &nativeError, message, sizeof(message), &messageLength) ==
+      SQL_SUCCESS) {
+    err_msg = std::string((char *)message);
+  } else {
+    err_msg = "Unknown error occurred.";
+  }
 
-  ODBCConnector(const ODBCConnector&) = delete;
-  ODBCConnector& operator=(const ODBCConnector&) = delete;
+  std::cerr << "ODBC Error: " << err_msg << std::endl;
+}
 
-  bool Connect(const std::string &dsn, const std::string &user,
-               const std::string &password);
-  void Disconnect();
-  bool ExecuteQuery(const std::string &query);
+class SQLRequest {
+ public:
+  SQLRequest();
+  ~SQLRequest();
+
+  SQLRequest(const SQLRequest &) = delete;
+  SQLRequest &operator=(const SQLRequest &) = delete;
+
   bool FetchResults();
-  std::string GetErrorMessage() const;
 
-private:
-  SQLHENV henv_;
-  SQLHDBC hdbc_;
+  void CleanUp();
+
+  void SetSQL(const std::string &str) { sql_str_ = str; }
+
+  void SetSQL(std::string &&str) { sql_str_ = std::move(str); }
+
+  const std::string &SQL() const { return sql_str_; };
+
+  std::string ErrorMsg() const { return err_msg_; }
+
+ private:
   SQLHSTMT hstmt_;
-  SQLRETURN ret_;
-  std::string last_error_;
+  std::string sql_str_;
+  std::string err_msg_;
 
-  // singletone
+  friend class ODBCConnector;
+};
+
+class ODBCConnector {
+ public:
   ODBCConnector();
   ~ODBCConnector();
 
-  void CleanUp();
-  void HandleError(SQLSMALLINT handleType, SQLHANDLE handle);
+  bool Connnect(SQLHENV &henv, const std::string &dsn, const std::string &user, const std::string &passwd);
+
+  void Disconnect();
+
+  bool ExecuteQuery(SQLRequest &req);
+
+ private:
+  SQLHDBC hdbc_;
 };
 
-#endif // ODBC_CONNECTOR_H
+#endif  // ODBC_CONNECTOR_H

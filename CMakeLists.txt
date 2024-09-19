@@ -7,6 +7,9 @@ project(odbc_connector)
 find_package(ODBC REQUIRED)
 
 add_executable(odbc_connector main.cpp
-              odbc_connector.hpp odbc_connector.cpp)
+              odbc_connector.hpp odbc_connector.cpp
+              connection_pool.hpp connection_pool.cpp
+              connector_guard.hpp connector_guard.cpp)
+
 
 target_link_libraries(odbc_connector ODBC::ODBC)
